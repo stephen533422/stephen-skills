@@ -50,6 +50,8 @@ claude plugin update stephen-skills@stephen
 
 一次合併含多個 commit 時取**最高**級距。**版本號是更新的唯一訊號**——使用者端比對版本才決定要不要重抓，版本沒動的 push 收不到。
 
+> ⚠ **用 Squash and merge 時，級距是看 PR 標題**。squash 只留一筆 commit，訊息預設取自 PR 標題，分支上各筆的 type 全被丟掉——所以**PR 標題本身要寫成 `type: subject`**，不然想發的 minor 會被判成 patch。Merge commit 與 Rebase 兩種方式則照分支上的 commit 訊息判定。
+
 ### 啟用 CI 前的一次性設定
 
 1. **先補一個起始 tag**：`git tag -a v<現行版號> -m v<現行版號> && git push --tags`。沒有 tag 時 CI 會拿**整段歷史**算級距。
