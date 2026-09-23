@@ -1,0 +1,110 @@
+name: Release
+
+# 合進 main 後自動 bump plugin.json 的 version 並打 tag。
+# 分支上不要手動改 version——那一行每個 MR 都會動，手動填必然互撞。
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # main 有保護規則時，預設的 GITHUB_TOKEN 推不回去，改放 RELEASE_TOKEN
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: 依 commit message 決定級距
+        id: level
+        run: |
+          set -euo pipefail
+          LAST_TAG=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          if [ -n "$LAST_TAG" ]; then
+            RANGE="$LAST_TAG..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          LOG=$(git log --format='%s%n%b' "$RANGE")
+
+          if [ -z "$(echo "$LOG" | tr -d '[:space:]')" ]; then
+            echo "自上一個 tag 以來沒有新 commit，跳過"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 破壞性變更優先：type 後綴 ! 或內文出現 BREAKING CHANGE:
+          if echo "$LOG" | grep -qE '^[a-z]+(\([^)]*\))?!:' || echo "$LOG" | grep -qE '^BREAKING CHANGE:'; then
+            LEVEL=major
+          elif echo "$LOG" | grep -qE '^feat(\([^)]*\))?:'; then
+            LEVEL=minor
+          else
+            LEVEL=patch
+          fi
+
+          echo "範圍 $RANGE，級距 $LEVEL"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "level=$LEVEL" >> "$GITHUB_OUTPUT"
+
+      - name: 算出新版號
+        id: bump
+        if: steps.level.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          MANIFEST=.claude-plugin/plugin.json
+          CUR=$(jq -r .version "$MANIFEST")
+
+          if ! echo "$CUR" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::plugin.json 的 version 不是 x.y.z：$CUR"
+            exit 1
+          fi
+
+          IFS=. read -r MA MI PA <<< "$CUR"
+          case "${{ steps.level.outputs.level }}" in
+            major) MA=$((MA + 1)); MI=0; PA=0 ;;
+            minor) MI=$((MI + 1)); PA=0 ;;
+            patch) PA=$((PA + 1)) ;;
+          esac
+          NEW="$MA.$MI.$PA"
+
+          if git rev-parse -q --verify "refs/tags/v$NEW" >/dev/null; then
+            echo "::error::tag v$NEW 已存在，version 可能被手動改過"
+            exit 1
+          fi
+
+          echo "$CUR -> $NEW"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: 寫回 manifest 並驗證
+        if: steps.level.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          MANIFEST=.claude-plugin/plugin.json
+          jq --indent 4 --arg v '${{ steps.bump.outputs.new }}' '.version = $v' "$MANIFEST" > "$MANIFEST.tmp"
+          mv "$MANIFEST.tmp" "$MANIFEST"
+          jq -e '.name and .version and (.skills | length > 0)' "$MANIFEST" > /dev/null
+          # skills 陣列點到的目錄都要有 SKILL.md，漏建會讓使用者端載入時才發現
+          for d in $(jq -r '.skills[]' "$MANIFEST"); do
+            test -f "$d/SKILL.md" || { echo "::error::$d/SKILL.md 不存在"; exit 1; }
+          done
+
+      - name: Commit 與 tag
+        if: steps.level.outputs.skip == 'false'
+        env:
+          NEW: ${{ steps.bump.outputs.new }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # [skip ci] 讓這筆 commit 不再觸發本 workflow
+          git commit -m "chore: release v$NEW [skip ci]" -- .claude-plugin/plugin.json
+          git tag -a "v$NEW" -m "v$NEW"
+          git push origin HEAD:main --follow-tags

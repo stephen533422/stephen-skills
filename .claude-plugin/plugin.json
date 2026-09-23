@@ -1,0 +1,19 @@
+{
+    "name": "stephen-skills",
+    "version": "1.1.2",
+    "description": "Claude Code plugin with SPEC workflow skills: spec-vs-implementation diffing, spec-to-code delivery waves, and intent-based commit splitting.",
+    "author": {
+        "name": "stephenho"
+    },
+    "keywords": [
+        "spec",
+        "code-review",
+        "workflow",
+        "git"
+    ],
+    "skills": [
+        "./skills/compare-diff",
+        "./skills/spec-to-code",
+        "./skills/commit"
+    ]
+}

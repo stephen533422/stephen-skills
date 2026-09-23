@@ -1,0 +1,19 @@
+{
+    "name": "stephen",
+    "owner": {
+        "name": "stephenho"
+    },
+    "description": "Personal Claude Code plugin marketplace.",
+    "plugins": [
+        {
+            "name": "stephen-skills",
+            "source": "./",
+            "description": "Claude Code plugin with SPEC workflow skills: spec-vs-implementation diffing, spec-to-code delivery waves, and intent-based commit splitting.",
+            "category": "engineering",
+            "keywords": [
+                "spec",
+                "workflow"
+            ]
+        }
+    ]
+}
