@@ -17,7 +17,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           # main 有保護規則時，預設的 GITHUB_TOKEN 推不回去，改放 RELEASE_TOKEN
